@@ -1,4 +1,6 @@
 module Main where
 
+import SNX
+
 main :: IO ()
-main = undefined
+main = interact decode
