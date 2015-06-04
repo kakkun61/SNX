@@ -1,6 +1,6 @@
 module Main where
 
-import SNX
+import Language.Snx
 
 main :: IO ()
 main = interact decode
