@@ -32,13 +32,16 @@ decodeElem nest snxs@(snx : rest)
   | ind snx /= 2 * nest                  = fail "illegal indent"
   | ':' == head (dropWhile (== ' ') snx) = decodeTextElem nest snxs
   | otherwise                            = decodeTagElem nest snxs
-decideElem _ [] = ""
+decodeElem _ [] = undefined
 
+decodeTextElem :: Int -> [Snx] -> Xml
 decodeTextElem nest snxs@(snx : rest) =
   trace ("text elem: " ++ text) undefined
   where
     text = drop 2 snx
+decodeTextElem _ [] = undefined
 
+decodeTagElem :: Int -> [Snx] -> Xml
 decodeTagElem nest snxs@(snx : rest) =
   if length rest == 0
   then
@@ -47,13 +50,16 @@ decodeTagElem nest snxs@(snx : rest) =
     decodeInTagElem tag nest rest
   where
     tag = snx
+decodeTagElem _ [] = undefined
 
+decodeInTagElem :: String -> Int -> [Snx] -> Xml
 decodeInTagElem tag nest snxs@(snx : rest) =
   case ind snx of
     i | i == 2 * (nest + 2) -> trace "attr" undefined
       | i == 2 * (nest + 1) -> trace "sub elem" undefined
       | i == 2 * nest       -> trace "next elem" undefined
     otherwise               -> fail "illegal indent"
+decodeInTagElem _ _ [] = undefined
 
 -- | count leading spaces
 ind :: String -> Int
