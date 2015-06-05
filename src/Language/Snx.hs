@@ -51,7 +51,7 @@ decodeTagElem _ [] = undefined
 decodeInTagElem :: String -> Int -> [Snx] -> Xml
 decodeInTagElem tag nest snxs@(snx : rest) =
   case countIndent snx of
-    i | i == nest + 2 -> trace "attr" undefined
+    i | i == nest + 2 -> "\n" ++ snx ++ decodeInTagElem tag nest rest
       | i == nest + 1 -> trace "sub elem" undefined
       | i == nest     -> trace "next elem" undefined
     _                 -> error "illegal indent"
