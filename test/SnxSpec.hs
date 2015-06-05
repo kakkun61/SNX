@@ -17,3 +17,7 @@ spec = do
 
     it "2-nested tag elem" $ do
       decode "a\n  b\n    c\n" `shouldBe` "<a>\n  <b>\n    <c />\n  </b>\n</a>\n"
+
+    it "2 child tag elem" $ do
+      decode "a\n  b\n  c\n" `shouldBe` "<a>\n  <b />\n  <c />\n</a>\n"
+

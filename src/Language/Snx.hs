@@ -43,7 +43,7 @@ decodeTextElem _ [] = undefined
 
 decodeTagElem :: Int -> [Snx] -> Xml
 decodeTagElem nest snxs@(snx : rest) =
-  shift nest $ "<" ++ tag ++ decodeInTagElem tag nest rest ++ "\n"
+  shift nest $ "<" ++ tag ++ decodeInTagElem tag nest rest
   where
     tag = unshift snx
 decodeTagElem _ [] = undefined
@@ -52,10 +52,10 @@ decodeInTagElem :: String -> Int -> [Snx] -> Xml
 decodeInTagElem tag nest snxs@(snx : rest) =
   case countIndent snx of
     i | i == nest + 2 -> "\n" ++ snx ++ decodeInTagElem tag nest rest
-      | i == nest + 1 -> ">\n" ++ decodeElem (nest + 1) snxs ++ shift nest ("</" ++ tag ++ ">")
-      | i == nest     -> trace "next elem" undefined
+      | i == nest + 1 -> ">\n" ++ decodeElem (nest + 1) snxs ++ shift nest ("</" ++ tag ++ ">\n")
+      | i == nest     -> " />\n" ++ decodeElem nest snxs
     _                 -> error "illegal indent"
-decodeInTagElem _ _ [] = " />"
+decodeInTagElem _ _ [] = " />\n"
 
 -- | count leading spaces
 countIndent :: String -> Int
