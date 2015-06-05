@@ -29,8 +29,8 @@ decode = decodeElem 0 . lines
 
 decodeElem :: Int -> [Snx] -> Xml
 decodeElem nest snxs@(snx : rest)
-  | ind snx /= indent * nest                  = fail "illegal indent"
-  | ':' == head (dropWhile (== ' ') snx) = decodeTextElem nest snxs
+  | countIndent snx /= nest                  = error "illegal indent"
+  | ':' == head (unshift snx) = decodeTextElem nest snxs
   | otherwise                            = decodeTagElem nest snxs
 decodeElem _ [] = undefined
 
@@ -43,23 +43,35 @@ decodeTextElem _ [] = undefined
 
 decodeTagElem :: Int -> [Snx] -> Xml
 decodeTagElem nest snxs@(snx : rest) =
-  replicate (indent * nest) ' ' ++ "<" ++ tag ++ decodeInTagElem tag nest rest
+  shift nest $ "<" ++ tag ++ decodeInTagElem tag nest rest
   where
-    tag = dropWhile (== ' ') snx
+    tag = unshift snx
 decodeTagElem _ [] = undefined
 
 decodeInTagElem :: String -> Int -> [Snx] -> Xml
 decodeInTagElem tag nest snxs@(snx : rest) =
-  case ind snx of
-    i | i == indent * (nest + 2) -> trace "attr" undefined
-      | i == indent * (nest + 1) -> trace "sub elem" undefined
-      | i == indent * nest       -> trace "next elem" undefined
-    otherwise               -> fail "illegal indent"
-decodeInTagElem tag _ [] = " />\n"
+  case countIndent snx of
+    i | i == nest + 2 -> trace "attr" undefined
+      | i == nest + 1 -> trace "sub elem" undefined
+      | i == nest     -> trace "next elem" undefined
+    _                 -> error "illegal indent"
+decodeInTagElem _ _ [] = " />\n"
 
 -- | count leading spaces
-ind :: String -> Int
-ind = length . takeWhile (== ' ')
+countIndent :: String -> Int
+countIndent text =
+  let
+    n = length (takeWhile (== ' ') text)
+  in
+    if n `mod` indent == 0
+    then n `div` indent
+    else error "illegal indent"
 
 indent :: Int
 indent = 2
+
+shift :: Int -> String -> String
+shift n text = replicate (n * indent) ' ' ++ text
+
+unshift :: String -> String
+unshift = dropWhile (== ' ')
