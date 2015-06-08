@@ -29,9 +29,9 @@ decode = decodeElem 0 . lines
 
 decodeElem :: Int -> [Snx] -> Xml
 decodeElem nest snxs@(snx : rest)
-  | countIndent snx /= nest                  = error "illegal indent"
+  | countIndent snx /= nest   = error "illegal indent"
   | ':' == head (unshift snx) = decodeTextElem nest snxs
-  | otherwise                            = decodeTagElem nest snxs
+  | otherwise                 = decodeTagElem nest snxs
 decodeElem _ [] = undefined
 
 decodeTextElem :: Int -> [Snx] -> Xml
