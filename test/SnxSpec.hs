@@ -21,6 +21,15 @@ spec = do
     it "2 child tag elem" $ do
       decode "a\n  b\n  c\n" `shouldBe` "<a>\n  <b />\n  <c />\n</a>\n"
 
+    -- a
+    --     p
+    --   b
+    --       q
+    --     c
+    --         s
+    --     d
+    --   e
+    -- ↓
     -- <a
     --     p>
     --   <b
@@ -36,3 +45,9 @@ spec = do
       decode "a\n    p\n  b\n      q\n      r\n    c\n        s\n    d\n  e\n"
         `shouldBe`
           "<a\n    p>\n  <b\n      q\n      r>\n    <c\n        s />\n    <d />\n  </b>\n  <e />\n</a>\n"
+
+    -- <a>
+    --   Hi
+    -- </a>
+    it "text elem" $ do
+      decode "a\n  : Hi\n" `shouldBe` "<a>\n  Hi\n</a>\n"

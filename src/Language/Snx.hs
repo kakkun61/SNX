@@ -49,10 +49,10 @@ decodeElem ctx@(Context nest ln snxs@(snx : rest))
   | otherwise                  = decodeTagElem ctx
 
 decodeTextElem :: Context -> (Xml, Context)
-decodeTextElem (Context nest ln snxs@(snx : rest)) =
-  trace ("text elem: " ++ text) undefined
+decodeTextElem (Context nest ln snxs@(snx : rest)) = trace ("text elem: " ++ text) $
+  (text ++ "\n", Context nest (ln + 1) rest)
   where
-    text = drop 2 snx
+    text = shift nest $ drop 2 $ unshift snx
 
 decodeTagElem :: Context -> (Xml, Context)
 decodeTagElem (Context nest ln snxs@(snx : rest)) = trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
