@@ -1,6 +1,7 @@
 module Language.Snx (decode) where
 
 import Debug.Trace
+import Control.Monad.State
 
 type Xml = String
 type Snx = String
@@ -8,6 +9,8 @@ type LineNum = Int
 type Nest = Int
 
 data Context = Context Nest LineNum [Snx]
+
+type Decoder = State Context Xml
 
 -- |
 -- 下記コードから
@@ -31,15 +34,20 @@ data Context = Context Nest LineNum [Snx]
 decode :: Snx -> Xml
 decode = fst . decodeSnx . (Context 0 1) . lines
 
-decodeSnx :: Context -> (Xml, Context)
-decodeSnx ctx@(Context nest ln snxs@(snx : rest)) = trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  go $ decodeElem ctx
+decodeSnx :: Decoder
+decodeSnx = do
+  ctx@(Context nest ln snxs@(snx : rest)) <- get
+  trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
+  go ""
   where
-    go r@(xml, Context _ _ []) = r
-    go r@(xml, ctx@(Context nest' _ _))
-      | nest == nest' = let (xml', ctx') = decodeElem ctx
-                        in go (xml ++ xml', ctx')
-      | otherwise     = r
+    go xml = do
+      ctx <- get
+      case ctx of
+        Context _ _ [] -> return ""
+        Context nest' _ _
+          | nest == nest' -> xml' <- decodeElem
+                             go (xml ++ xml')
+          | otherwise     -> return xml
 
 decodeElem :: Context -> (Xml, Context)
 decodeElem ctx@(Context nest ln snxs@(snx : rest))
