@@ -33,7 +33,7 @@ decode = fst . decodeSnx . (Context 0 1) . lines
 
 decodeSnx :: Context -> (Xml, Context)
 decodeSnx ctx@(Context nest ln snxs@(snx : rest)) = trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  go $ decodeElem ctx
+  go ("", ctx)
   where
     go r@(xml, Context _ _ []) = r
     go r@(xml, ctx@(Context nest' _ _))
