@@ -32,53 +32,71 @@ type Decoder = State Context Xml
 -- >>> decode "a\n  |b\n    c\n  d"
 -- "<a><b><c /></b><d />< a>"
 decode :: Snx -> Xml
-decode = fst . decodeSnx . (Context 0 1) . lines
+decode = fst . runState decodeSnx . (Context 0 1) . lines
 
 decodeSnx :: Decoder
 decodeSnx = do
-  ctx@(Context nest ln snxs@(snx : rest)) <- get
-  trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  go ""
+  Context nest ln snxs@(snx : rest) <- get
+  trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ go nest ""
   where
-    go xml = do
+    go :: Nest -> Xml -> Decoder
+    go nest xml = do
       ctx <- get
       case ctx of
         Context _ _ [] -> return ""
         Context nest' _ _
-          | nest == nest' -> xml' <- decodeElem
-                             go (xml ++ xml')
+          | nest == nest' -> do
+                               xml' <- decodeElem
+                               go nest (xml ++ xml')
           | otherwise     -> return xml
 
-decodeElem :: Context -> (Xml, Context)
-decodeElem ctx@(Context nest ln snxs@(snx : rest))
-  | trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") False = error "never come here"
-  | countIndent ln snx /= nest = syntaxError "illegal indent (decodeElem)" ln snx
-  | ':' == head (unshift snx)  = decodeTextElem ctx
-  | otherwise                  = decodeTagElem ctx
+decodeElem :: Decoder
+decodeElem = do
+  Context nest ln snxs@(snx : rest) <- get
+  trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
+  if countIndent ln snx /= nest
+    then syntaxError "illegal indent (decodeElem)" ln snx
+    else if ':' == head (unshift snx)
+      then decodeTextElem
+      else decodeTagElem
 
-decodeTextElem :: Context -> (Xml, Context)
-decodeTextElem (Context nest ln snxs@(snx : rest)) = trace ("text elem: " ++ text) $
-  (text ++ "\n", Context nest (ln + 1) rest)
-  where
-    text = shift nest $ drop 2 $ unshift snx
+decodeTextElem :: Decoder
+decodeTextElem = do
+  Context nest ln snxs@(snx : rest) <- get
+  let text = shift nest $ drop 2 $ unshift snx
+  trace ("text elem: " ++ text) $ return ()
+  put $ Context nest (ln + 1) rest
+  return $ text ++ "\n"
 
-decodeTagElem :: Context -> (Xml, Context)
-decodeTagElem (Context nest ln snxs@(snx : rest)) = trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  (shift nest $ "<" ++ tag ++ xml', ctx')
-  where
-    tag = unshift snx
-    (xml', ctx') = decodeInTagElem tag (Context nest (ln + 1) rest)
+decodeTagElem :: Decoder
+decodeTagElem = do
+  Context nest ln snxs@(snx : rest) <- get
+  trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
+  let tag = unshift snx
+  put $ Context nest (ln + 1) rest
+  xml <- decodeInTagElem tag
+  return $ shift nest $ "<" ++ tag ++ xml
 
-decodeInTagElem :: String -> Context -> (Xml, Context)
-decodeInTagElem tag (Context nest ln snxs@(snx : rest)) = trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  case countIndent ln snx of
-    i | i == nest + 2 -> let (xml', ctx') = decodeInTagElem tag (Context nest (ln + 1) rest)
-                         in ("\n" ++ snx ++ xml', ctx')
-      | i == nest + 1 -> let (xml', Context _ ln' rest') = decodeSnx (Context (nest + 1) ln snxs)
-                         in (">\n" ++ xml' ++ shift nest ("</" ++ tag ++ ">\n"), Context nest ln' rest')
-      | i <= nest     -> (" />\n", Context i ln snxs)
-      | otherwise     -> syntaxError ("illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")") ln snx
-decodeInTagElem tag ctx@(Context _ _ []) = (" />\n", ctx)
+decodeInTagElem :: String -> Decoder
+decodeInTagElem tag = do
+  ctx <- get
+  case ctx of
+    Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
+      case countIndent ln snx of
+        i | i == nest + 2 -> do
+              put $ Context nest (ln + 1) rest
+              xml <- decodeInTagElem tag
+              return $ "\n" ++ snx ++ xml
+          | i == nest + 1 -> do
+              put $ Context (nest + 1) ln snxs
+              xml <- decodeSnx
+              return $ ">\n" ++ xml ++ shift nest ("</" ++ tag ++ ">\n")
+          | i <= nest -> do
+              put $ Context i ln snxs
+              return " />\n"
+          | otherwise ->
+              syntaxError ("illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")") ln snx
+    Context _ _ [] -> return " />\n"
 
 -- | count leading spaces
 countIndent :: LineNum -> String -> Int
