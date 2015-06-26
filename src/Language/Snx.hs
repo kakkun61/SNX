@@ -65,7 +65,7 @@ decodeTextElem = do
   Context nest ln snxs@(snx : rest) <- get
   let text = shift nest $ drop 2 $ unshift snx
   trace ("text elem: " ++ text) $ return ()
-  put $ Context nest (ln + 1) rest
+  nextline
   return $ text ++ "\n"
 
 decodeTagElem :: Decoder
@@ -73,7 +73,7 @@ decodeTagElem = do
   Context nest ln snxs@(snx : rest) <- get
   trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
   let tag = unshift snx
-  put $ Context nest (ln + 1) rest
+  nextline
   xml <- decodeInTagElem tag
   return $ shift nest $ "<" ++ tag ++ xml
 
@@ -84,7 +84,7 @@ decodeInTagElem tag = do
     Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
       case countIndent ln snx of
         i | i == nest + 2 -> do
-              put $ Context nest (ln + 1) rest
+              nextline
               xml <- decodeInTagElem tag
               return $ "\n" ++ snx ++ xml
           | i == nest + 1 -> do
@@ -119,3 +119,6 @@ unshift = dropWhile (== ' ')
 
 syntaxError :: String -> LineNum -> Snx -> a
 syntaxError msg ln snx = error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
+
+nextline :: State Context ()
+nextline = state $ \(Context nest ln (snx:snxs)) -> ((), Context nest (ln + 1) snxs)
