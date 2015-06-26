@@ -88,11 +88,11 @@ decodeInTagElem tag = do
               xml <- decodeInTagElem tag
               return $ "\n" ++ snx ++ xml
           | i == nest + 1 -> do
-              put $ Context (nest + 1) ln snxs
+              modifyNest (+ 1)
               xml <- decodeSnx
               return $ ">\n" ++ xml ++ shift nest ("</" ++ tag ++ ">\n")
           | i <= nest -> do
-              put $ Context i ln snxs
+              modifyNest $ const i
               return " />\n"
           | otherwise ->
               syntaxError ("illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")") ln snx
@@ -122,3 +122,6 @@ syntaxError msg ln snx = error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")
 
 nextline :: State Context ()
 nextline = state $ \(Context nest ln (snx:snxs)) -> ((), Context nest (ln + 1) snxs)
+
+modifyNest :: (Nest -> Nest) -> State Context ()
+modifyNest f = state $ \(Context nest ln snxs) -> ((), Context (f nest) ln snxs)
