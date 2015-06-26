@@ -43,7 +43,7 @@ decodeSnx = do
     go nest xml = do
       ctx <- get
       case ctx of
-        Context _ _ [] -> return ""
+        Context _ _ [] -> return xml
         Context nest' _ _
           | nest == nest' -> do
                                xml' <- decodeElem
