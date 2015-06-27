@@ -22,3 +22,6 @@ cabal.sandbox.config
 .idea
 
 out
+
+# stack
+.stack-work
