@@ -52,10 +52,10 @@ decodeSnx = do
 
 decodeElem :: Decoder
 decodeElem = do
-  Context nest ln snxs@(snx : rest) <- get
+  ctx@(Context nest ln snxs@(snx : rest)) <- get
   trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
-  if countIndent ln snx /= nest
-    then syntaxError "illegal indent (decodeElem)" ln snx
+  if countIndent ctx snx /= nest
+    then syntaxError ctx $ "illegal indent (decodeElem)"
     else if ':' == head (unshift snx)
       then decodeTextElem
       else decodeTagElem
@@ -82,7 +82,7 @@ decodeInTagElem tag = do
   ctx <- get
   case ctx of
     Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
-      case countIndent ln snx of
+      case countIndent ctx snx of
         i | i == nest + 2 -> do
               nextline
               xml <- decodeInTagElem tag
@@ -95,18 +95,18 @@ decodeInTagElem tag = do
               modifyNest $ const i
               return " />\n"
           | otherwise ->
-              syntaxError ("illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")") ln snx
+              syntaxError ctx $ "illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")"
     Context _ _ [] -> return " />\n"
 
 -- | count leading spaces
-countIndent :: LineNum -> String -> Int
-countIndent ln text =
+countIndent :: Context -> String -> Int
+countIndent ctx text =
   let
     n = length (takeWhile (== ' ') text)
   in
     if n `mod` indent == 0
     then n `div` indent
-    else syntaxError ("illegal indent (not any multiples of " ++ (show indent)) ln text
+    else syntaxError ctx $ "illegal indent (not any multiples of " ++ (show indent)
 
 indent :: Int
 indent = 2
@@ -117,8 +117,8 @@ shift n text = replicate (n * indent) ' ' ++ text
 unshift :: String -> String
 unshift = dropWhile (== ' ')
 
-syntaxError :: String -> LineNum -> Snx -> a
-syntaxError msg ln snx = error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
+syntaxError :: Context -> String -> a
+syntaxError (Context _ ln (snx:_)) msg = error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
 
 nextline :: State Context ()
 nextline = state $ \(Context nest ln (snx:snxs)) -> ((), Context nest (ln + 1) snxs)
