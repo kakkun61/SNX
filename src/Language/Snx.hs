@@ -45,9 +45,8 @@ decodeSnx = do
       case ctx of
         Context _ _ [] -> return xml
         Context nest' _ _
-          | nest == nest' -> do
-                               xml' <- decodeElem
-                               go nest (xml ++ xml')
+          | nest == nest' -> do xml' <- decodeElem
+                                go nest (xml ++ xml')
           | otherwise     -> return xml
 
 decodeElem :: Decoder
@@ -85,19 +84,15 @@ decodeInTagElem tag = do
     Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
       i <- countIndent snx
       case i of
-        _ | i == nest + 2 -> do
-              nextline
-              xml <- decodeInTagElem tag
-              return $ "\n" ++ snx ++ xml
-          | i == nest + 1 -> do
-              modifyNest (+ 1)
-              xml <- decodeSnx
-              return $ ">\n" ++ xml ++ shift nest ("</" ++ tag ++ ">\n")
-          | i <= nest -> do
-              modifyNest $ const i
-              return " />\n"
-          | otherwise ->
-              syntaxError $ "illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")"
+        _ | i == nest + 2 -> do nextline
+                                xml <- decodeInTagElem tag
+                                return $ "\n" ++ snx ++ xml
+          | i == nest + 1 -> do modifyNest (+ 1)
+                                xml <- decodeSnx
+                                return $ ">\n" ++ xml ++ shift nest ("</" ++ tag ++ ">\n")
+          | i <= nest     -> do modifyNest $ const i
+                                return " />\n"
+          | otherwise     -> syntaxError $ "illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")"
     Context _ _ [] -> return " />\n"
 
 -- | count leading spaces
