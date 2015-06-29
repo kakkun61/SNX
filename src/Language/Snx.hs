@@ -36,8 +36,8 @@ decode = fst . runState decodeSnx . (Context 0 1) . lines
 
 decodeSnx :: Decoder
 decodeSnx = do
-  Context nest ln snxs@(snx : rest) <- get
-  trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ go nest ""
+  Context nest _ _ <- get
+  go nest ""
   where
     go :: Nest -> Xml -> Decoder
     go nest xml = do
@@ -51,8 +51,7 @@ decodeSnx = do
 
 decodeElem :: Decoder
 decodeElem = do
-  ctx@(Context nest ln snxs@(snx : rest)) <- get
-  trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
+  (Context nest _ (snx:_)) <- get
   i <- countIndent snx
   if i /= nest
     then syntaxError $ "illegal indent (decodeElem)"
@@ -62,7 +61,7 @@ decodeElem = do
 
 decodeTextElem :: Decoder
 decodeTextElem = do
-  Context nest ln snxs@(snx : rest) <- get
+  Context nest _ (snx:_) <- get
   let text = shift nest $ drop 2 $ unshift snx
   trace ("text elem: " ++ text) $ return ()
   nextline
@@ -70,8 +69,7 @@ decodeTextElem = do
 
 decodeTagElem :: Decoder
 decodeTagElem = do
-  Context nest ln snxs@(snx : rest) <- get
-  trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
+  Context nest _ (snx:_) <- get
   let tag = unshift snx
   nextline
   xml <- decodeInTagElem tag
@@ -81,7 +79,7 @@ decodeInTagElem :: String -> Decoder
 decodeInTagElem tag = do
   ctx <- get
   case ctx of
-    Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
+    Context nest _ (snx:_) -> do
       i <- countIndent snx
       case i of
         _ | i == nest + 2 -> do nextline
