@@ -1,6 +1,7 @@
 module Language.Snx (decode) where
 
 import Debug.Trace
+import Control.Monad.State
 
 type Xml = String
 type Snx = String
@@ -8,6 +9,8 @@ type LineNum = Int
 type Nest = Int
 
 data Context = Context Nest LineNum [Snx]
+
+type Decoder = State Context Xml
 
 -- |
 -- 下記コードから
@@ -29,58 +32,76 @@ data Context = Context Nest LineNum [Snx]
 -- >>> decode "a\n  |b\n    c\n  d"
 -- "<a><b><c /></b><d />< a>"
 decode :: Snx -> Xml
-decode = fst . decodeSnx . (Context 0 1) . lines
+decode = fst . runState decodeSnx . (Context 0 1) . lines
 
-decodeSnx :: Context -> (Xml, Context)
-decodeSnx ctx@(Context nest ln snxs@(snx : rest)) = trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  go ("", ctx)
+decodeSnx :: Decoder
+decodeSnx = do
+  Context nest ln snxs@(snx : rest) <- get
+  trace ("decodeSnx (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ go nest ""
   where
-    go r@(xml, Context _ _ []) = r
-    go r@(xml, ctx@(Context nest' _ _))
-      | nest == nest' = let (xml', ctx') = decodeElem ctx
-                        in go (xml ++ xml', ctx')
-      | otherwise     = r
+    go :: Nest -> Xml -> Decoder
+    go nest xml = do
+      ctx <- get
+      case ctx of
+        Context _ _ [] -> return xml
+        Context nest' _ _
+          | nest == nest' -> do xml' <- decodeElem
+                                go nest (xml ++ xml')
+          | otherwise     -> return xml
 
-decodeElem :: Context -> (Xml, Context)
-decodeElem ctx@(Context nest ln snxs@(snx : rest))
-  | trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") False = error "never come here"
-  | countIndent ln snx /= nest = syntaxError "illegal indent (decodeElem)" ln snx
-  | ':' == head (unshift snx)  = decodeTextElem ctx
-  | otherwise                  = decodeTagElem ctx
+decodeElem :: Decoder
+decodeElem = do
+  ctx@(Context nest ln snxs@(snx : rest)) <- get
+  trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
+  i <- countIndent snx
+  if i /= nest
+    then syntaxError $ "illegal indent (decodeElem)"
+    else if ':' == head (unshift snx)
+      then decodeTextElem
+      else decodeTagElem
 
-decodeTextElem :: Context -> (Xml, Context)
-decodeTextElem (Context nest ln snxs@(snx : rest)) = trace ("text elem: " ++ text) $
-  (text ++ "\n", Context nest (ln + 1) rest)
-  where
-    text = shift nest $ drop 2 $ unshift snx
+decodeTextElem :: Decoder
+decodeTextElem = do
+  Context nest ln snxs@(snx : rest) <- get
+  let text = shift nest $ drop 2 $ unshift snx
+  trace ("text elem: " ++ text) $ return ()
+  nextline
+  return $ text ++ "\n"
 
-decodeTagElem :: Context -> (Xml, Context)
-decodeTagElem (Context nest ln snxs@(snx : rest)) = trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  (shift nest $ "<" ++ tag ++ xml', ctx')
-  where
-    tag = unshift snx
-    (xml', ctx') = decodeInTagElem tag (Context nest (ln + 1) rest)
+decodeTagElem :: Decoder
+decodeTagElem = do
+  Context nest ln snxs@(snx : rest) <- get
+  trace ("decodeTagElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
+  let tag = unshift snx
+  nextline
+  xml <- decodeInTagElem tag
+  return $ shift nest $ "<" ++ tag ++ xml
 
-decodeInTagElem :: String -> Context -> (Xml, Context)
-decodeInTagElem tag (Context nest ln snxs@(snx : rest)) = trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $
-  case countIndent ln snx of
-    i | i == nest + 2 -> let (xml', ctx') = decodeInTagElem tag (Context nest (ln + 1) rest)
-                         in ("\n" ++ snx ++ xml', ctx')
-      | i == nest + 1 -> let (xml', Context _ ln' rest') = decodeSnx (Context (nest + 1) ln snxs)
-                         in (">\n" ++ xml' ++ shift nest ("</" ++ tag ++ ">\n"), Context nest ln' rest')
-      | i <= nest     -> (" />\n", Context i ln snxs)
-      | otherwise     -> syntaxError ("illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")") ln snx
-decodeInTagElem tag ctx@(Context _ _ []) = (" />\n", ctx)
+decodeInTagElem :: String -> Decoder
+decodeInTagElem tag = do
+  ctx <- get
+  case ctx of
+    Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
+      i <- countIndent snx
+      case i of
+        _ | i == nest + 2 -> do nextline
+                                xml <- decodeInTagElem tag
+                                return $ "\n" ++ snx ++ xml
+          | i == nest + 1 -> do modifyNest (+ 1)
+                                xml <- decodeSnx
+                                return $ ">\n" ++ xml ++ shift nest ("</" ++ tag ++ ">\n")
+          | i <= nest     -> do modifyNest $ const i
+                                return " />\n"
+          | otherwise     -> syntaxError $ "illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")"
+    Context _ _ [] -> return " />\n"
 
 -- | count leading spaces
-countIndent :: LineNum -> String -> Int
-countIndent ln text =
-  let
-    n = length (takeWhile (== ' ') text)
-  in
-    if n `mod` indent == 0
-    then n `div` indent
-    else syntaxError ("illegal indent (not any multiples of " ++ (show indent)) ln text
+countIndent :: String -> State Context Int
+countIndent text = do
+  let n = length (takeWhile (== ' ') text)
+  if n `mod` indent == 0
+    then return $ n `div` indent
+    else syntaxError $ "illegal indent (not any multiples of " ++ (show indent)
 
 indent :: Int
 indent = 2
@@ -91,5 +112,11 @@ shift n text = replicate (n * indent) ' ' ++ text
 unshift :: String -> String
 unshift = dropWhile (== ' ')
 
-syntaxError :: String -> LineNum -> Snx -> a
-syntaxError msg ln snx = error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
+syntaxError :: String -> State Context a
+syntaxError msg = get >>= \(Context _ ln (snx:_)) -> error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
+
+nextline :: State Context ()
+nextline = state $ \(Context nest ln (snx:snxs)) -> ((), Context nest (ln + 1) snxs)
+
+modifyNest :: (Nest -> Nest) -> State Context ()
+modifyNest f = state $ \(Context nest ln snxs) -> ((), Context (f nest) ln snxs)
