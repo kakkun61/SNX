@@ -54,8 +54,9 @@ decodeElem :: Decoder
 decodeElem = do
   ctx@(Context nest ln snxs@(snx : rest)) <- get
   trace ("decodeElem (Context " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ return ()
-  if countIndent ctx snx /= nest
-    then syntaxError ctx $ "illegal indent (decodeElem)"
+  i <- countIndent snx
+  if i /= nest
+    then syntaxError $ "illegal indent (decodeElem)"
     else if ':' == head (unshift snx)
       then decodeTextElem
       else decodeTagElem
@@ -82,8 +83,9 @@ decodeInTagElem tag = do
   ctx <- get
   case ctx of
     Context nest ln snxs@(snx : rest) -> trace ("decodeInTagElem (Context " ++ tag ++ " " ++ (show nest) ++ " " ++ (show ln) ++ " \"" ++ snx ++ "...\")") $ do
-      case countIndent ctx snx of
-        i | i == nest + 2 -> do
+      i <- countIndent snx
+      case i of
+        _ | i == nest + 2 -> do
               nextline
               xml <- decodeInTagElem tag
               return $ "\n" ++ snx ++ xml
@@ -95,18 +97,16 @@ decodeInTagElem tag = do
               modifyNest $ const i
               return " />\n"
           | otherwise ->
-              syntaxError ctx $ "illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")"
+              syntaxError $ "illegal indent (actual " ++ (show i) ++ ", expexted " ++ (show nest) ++ " or " ++ (show (nest + 1)) ++ " or " ++ (show (nest + 2)) ++ ")"
     Context _ _ [] -> return " />\n"
 
 -- | count leading spaces
-countIndent :: Context -> String -> Int
-countIndent ctx text =
-  let
-    n = length (takeWhile (== ' ') text)
-  in
-    if n `mod` indent == 0
-    then n `div` indent
-    else syntaxError ctx $ "illegal indent (not any multiples of " ++ (show indent)
+countIndent :: String -> State Context Int
+countIndent text = do
+  let n = length (takeWhile (== ' ') text)
+  if n `mod` indent == 0
+    then return $ n `div` indent
+    else syntaxError $ "illegal indent (not any multiples of " ++ (show indent)
 
 indent :: Int
 indent = 2
@@ -117,8 +117,8 @@ shift n text = replicate (n * indent) ' ' ++ text
 unshift :: String -> String
 unshift = dropWhile (== ' ')
 
-syntaxError :: Context -> String -> a
-syntaxError (Context _ ln (snx:_)) msg = error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
+syntaxError :: String -> State Context a
+syntaxError msg = get >>= \(Context _ ln (snx:_)) -> error $ msg ++ " at " ++ (show ln) ++ " (" ++ snx ++ ")"
 
 nextline :: State Context ()
 nextline = state $ \(Context nest ln (snx:snxs)) -> ((), Context nest (ln + 1) snxs)
